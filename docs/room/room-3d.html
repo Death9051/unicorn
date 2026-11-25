@@ -1,0 +1,273 @@
+<title>Мастерская: 3D-набросок</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Neucha&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Тёмная «ночная мастерская» в цветах игры; одна тема намеренно. Панорама — главный объект страницы, всё остальное тихое. */
+:root{
+  --night:#151c27; --panel:#1f2a3a; --line:#34425a; --paper:#f3e9d2; --muted:#a9b4c4; --accent:#d8434f; --lamp:#ffe3a3;
+  --f-hand:"Neucha","Comic Sans MS",cursive; --f-body:"Inter",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--night);color:var(--paper)}
+body{font-family:var(--f-body);line-height:1.5;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--f-hand);font-weight:400;font-size:clamp(2rem,5vw,3rem);margin:0;color:var(--lamp);text-wrap:balance}
+h2{font-family:var(--f-hand);font-weight:400;font-size:1.6rem;margin:0;color:var(--lamp)}
+p{margin:0;max-width:65ch;color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.bar label{display:flex;gap:6px;align-items:center;cursor:pointer;font-size:.95rem}
+button{font:inherit;color:var(--paper);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--lamp)} button:focus-visible,input:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+button[aria-pressed="true"]{border-color:var(--accent);color:var(--lamp)}
+.pano{position:relative;overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#000}
+.pano-inner{position:relative;width:4480px;height:1080px;transform-origin:0 0}
+.pano canvas{position:absolute;inset:0;width:4480px;height:1080px;display:block}
+.frame{position:absolute;left:1280px;top:0;width:1920px;height:1080px;border:4px dashed var(--accent);box-sizing:border-box;pointer-events:none}
+.frame span{position:absolute;top:8px;left:12px;font-family:var(--f-mono);font-size:22px;color:var(--accent);background:rgba(0,0,0,.55);padding:2px 8px;border-radius:4px}
+.meta{font-family:var(--f-mono);font-size:.8rem;color:var(--muted)}
+.free{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;aspect-ratio:16/9;max-width:100%;background:#000}
+.free canvas{width:100%;height:100%;display:block;touch-action:none}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px 24px;margin:0;padding:0;list-style:none}
+.legend li{display:flex;gap:10px;font-size:.92rem;min-width:0}
+.legend b{font-weight:600;color:var(--paper);white-space:nowrap}
+.legend span{color:var(--muted)}
+.zone{font-family:var(--f-mono);font-size:.75rem;color:var(--lamp);border:1px solid var(--line);border-radius:4px;padding:0 6px;align-self:flex-start;white-space:nowrap}
+.err{color:var(--accent)}
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Мастерская: 3D-набросок</h1>
+    <p>Черновая расстановка мастерской из простых фигур, чтобы было по чему рисовать. Сверху панорама глазами Софии, сидящей за столом: 4480×1080, пунктиром отмечен стартовый экран 1920×1080, по бокам по 2/3 экрана. Ниже ту же сцену можно покрутить мышью.</p>
+  </header>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <div class="bar">
+      <h2>Панорама игрока</h2>
+      <label><input type="checkbox" id="lbl" checked> подписи</label>
+      <label><input type="checkbox" id="frm" checked> стартовый экран</label>
+      <button id="fit" aria-pressed="true">Вписать в ширину</button>
+    </div>
+    <div class="pano" id="pano">
+      <div class="pano-inner" id="panoInner">
+        <canvas id="cv3d" width="4480" height="1080"></canvas>
+        <canvas id="cvLbl" width="4480" height="1080"></canvas>
+        <div class="frame" id="frame"><span>стартовый экран 1920×1080</span></div>
+      </div>
+    </div>
+    <div class="meta">Поворот головы: ≈180° по горизонтали, центр ≈77°. Вертикали прямые (цилиндрическая проекция), как будет при прокрутке фона в игре.</div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Свободный осмотр</h2>
+    <p>Тяни мышью, чтобы вращать; колесо — приблизить. Белая точка — место, где сидит София.</p>
+    <div class="free" id="free"><canvas id="cvFree"></canvas></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:10px">
+    <h2>Что где стоит</h2>
+    <ul class="legend" id="legend"></ul>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const W=4480,H=1080, TAN_TOP=0.26, TAN_BOT=-0.5;
+const PX_PER_TAN=H/(TAN_TOP-TAN_BOT);           // ≈1479 px на единицу тангенса (≈ px на радиан в центре)
+const EYE=new THREE.Vector3(0,1.2,1.6);
+const C={wall:0x3e4a5c,wallD:0x2b3442,floor:0x6b4a3a,floorD:0x4e3429,ceil:0x1f2a3a,paper:0xf3e9d2,plush:0xf6ebd9,pink:0xf2b8c6,
+  wood:0x8c6239,woodL:0xb88a5a,pine:0x2f5d46,pineD:0x234736,gold:0xf5d06b,brass:0xc9a24d,cat:0xd98c4a,goat:0x8c7a64,horn:0x5e503f,
+  glass:0x6e9cc9,canary:0xf2d14a,metal:0x9aa3ad,fridge:0xdfe3e6,red:0xb3242f,lamp:0xffe3a3,dark:0x1e1a1d,scarf:0xc9b3e6};
+
+const LEGEND=[];
+function scene(){
+  const s=new THREE.Scene(); s.background=new THREE.Color(0x0e131b);
+  const M=c=>new THREE.MeshLambertMaterial({color:c});
+  const add=(geo,col,x,y,z,o={})=>{const m=new THREE.Mesh(geo,o.mat||M(col));m.position.set(x,y,z);if(o.ry)m.rotation.y=o.ry;if(o.rz)m.rotation.z=o.rz;if(o.rx)m.rotation.x=o.rx;m.castShadow=m.receiveShadow=true;(o.parent||s).add(m);return m;};
+  const box=(w,h,d,col,x,y,z,o)=>add(new THREE.BoxGeometry(w,h,d),col,x,y+h/2,z,o);
+  const cyl=(r1,r2,h,col,x,y,z,o)=>add(new THREE.CylinderGeometry(r1,r2,h,(o&&o.seg)||18),col,x,y+h/2,z,o);
+  const label=(text,zone,note,x,y,z)=>LEGEND.push({text,zone,note,p:new THREE.Vector3(x,y,z)});
+
+  // Комната 6.4 × 5.6 × 2.7 м
+  box(6.4,0.02,5.6,C.floor,0,-0.02,-0.2);
+  for(let i=0;i<8;i++) box(0.02,0.005,5.6,C.floorD,-3.2+0.8*i+0.4,0,-0.2);
+  box(6.4,0.02,5.6,C.ceil,0,2.7,-0.2);
+  box(6.4,2.7,0.05,C.wall,0,0,-3.0);
+  box(0.05,2.7,5.6,C.wallD,-3.2,0,-0.2);
+  box(0.05,2.7,5.6,C.wallD,3.2,0,-0.2);
+  box(6.4,2.7,0.05,C.wallD,0,0,2.6);
+  box(6.4,0.12,0.03,C.wood,0,0,-2.97); // плинтус
+
+  // Стол
+  box(1.6,0.05,0.9,C.woodL,0,0.7,0.6);
+  [[-0.72,0.22],[0.72,0.22],[-0.72,0.98],[0.72,0.98]].forEach(([x,z])=>box(0.06,0.7,0.06,C.wood,x,0,z));
+  label("Стол","центр","сборка единорога",0,0.75,0.95);
+  // Подставка и единорог (силуэт)
+  cyl(0.16,0.18,0.05,C.wood,0,0.75,0.45);
+  const u=new THREE.Group(); u.position.set(0,0.8,0.45); s.add(u);
+  box(0.30,0.13,0.13,C.plush,0,0.13,0,{parent:u});
+  [[-0.11,-0.045],[-0.11,0.045],[0.11,-0.045],[0.11,0.045]].forEach(([x,z])=>cyl(0.018,0.018,0.13,C.woodL,x,0,z,{parent:u}));
+  box(0.06,0.12,0.07,C.plush,-0.15,0.22,0,{parent:u,rz:-0.4});
+  box(0.12,0.08,0.08,C.plush,-0.21,0.31,0,{parent:u});
+  add(new THREE.ConeGeometry(0.015,0.12,10),C.gold,-0.22,0.41,0,{parent:u,rz:0.25});
+  box(0.03,0.16,0.02,C.scarf,-0.13,0.22,0,{parent:u,rz:-0.4});
+  box(0.02,0.14,0.03,C.scarf,0.16,0.10,0,{parent:u,rz:0.5});
+  label("Подставка с единорогом","центр","туловище и голова из коробки",0,1.25,0.45);
+  // Инструкция, лампа, нож, трофеи
+  box(0.34,0.015,0.24,C.paper,-0.42,0.75,0.45,{ry:0.25});
+  label("Инструкция","центр","",-0.42,0.8,0.45);
+  cyl(0.08,0.09,0.03,C.dark,0.62,0.75,0.22);
+  cyl(0.012,0.012,0.42,C.metal,0.62,0.78,0.22);
+  add(new THREE.ConeGeometry(0.11,0.13,18,1,true),C.red,0.52,1.18,0.28,{rx:-0.3,rz:0.6});
+  label("Лампа","центр","",0.62,1.36,0.22);
+  box(0.22,0.008,0.03,C.metal,0.3,0.75,0.45,{ry:-0.6});
+  box(0.09,0.016,0.035,C.dark,0.18,0.75,0.53,{ry:-0.6});
+  label("Нож","центр","все части игрока",0.27,0.8,0.48);
+  [0.36,0.44,0.52].forEach((x,i)=>{cyl(0.025,0.03,0.07,[C.plush,C.cat,C.red][i],x,0.75,0.2);});
+  label("Трофеи","центр","3 фигурки за концовки",0.44,0.86,0.2);
+
+  // Слева: коробка, ёлка, кресло с котом, голова козла
+  box(0.55,0.38,0.42,C.pink,-1.6,0,-0.9,{ry:0.3});
+  box(0.6,0.03,0.46,C.red,-1.75,0,-0.2,{ry:0.9});
+  label("Коробка с набором","слева","",-1.6,0.5,-0.9);
+  const tx=-2.3,tz=-2.35;
+  cyl(0.06,0.06,0.25,C.wood,tx,0,tz);
+  [[0.7,0.8,0.2],[0.55,0.7,0.75],[0.38,0.55,1.25],[0.2,0.4,1.62]].forEach(([r,h,y],i)=>add(new THREE.ConeGeometry(r,h,14),i%2?C.pine:C.pineD,tx,y+h/2,tz));
+  add(new THREE.ConeGeometry(0.03,0.18,10),C.gold,tx,2.1,tz);
+  for(let i=0;i<26;i++){const a=i*0.9,h=0.35+i*0.055,r=0.62-h*0.27;add(new THREE.SphereGeometry(0.03,8,8),[0xff5a5a,0xffe3a3,0x7fd1ff][i%3],tx+Math.cos(a)*r,h,tz+Math.sin(a)*r);}
+  label("Ёлка","слева","игрушечный рог (верхушка), ветки → ноги",tx+0.75,1.6,tz);
+  label("Клубок под ёлкой","слева","пряжа → хвост",tx+0.6,0.1,tz+0.6);
+  add(new THREE.SphereGeometry(0.07,12,12),C.scarf,tx+0.6,0.07,tz+0.6);
+  const ax=-2.65,az=-0.35;
+  box(0.8,0.4,0.8,0x7a3b44,ax,0,az); box(0.15,0.75,0.8,0x7a3b44,ax-0.33,0.4,az); box(0.8,0.3,0.15,0x7a3b44,ax,0.4,az-0.33); box(0.8,0.3,0.15,0x7a3b44,ax,0.4,az+0.33);
+  add(new THREE.SphereGeometry(0.16,14,12),C.cat,ax+0.05,0.53,az).scale.set(1.5,0.75,1);
+  add(new THREE.SphereGeometry(0.08,12,10),C.cat,ax+0.25,0.6,az+0.05);
+  label("Кресло с котом","слева","кошачья шерсть → грива (щётка)",ax+0.1,0.95,az);
+  box(0.3,0.04,0.2,C.wood,-3.14,1.5,az,{ry:Math.PI/2});
+  box(0.22,0.18,0.28,C.goat,-3.02,1.57,az);
+  [-1,1].forEach(k=>add(new THREE.ConeGeometry(0.03,0.25,8),C.horn,-3.0,1.81,az+k*0.07,{rz:-0.5,rx:k*0.25}));
+  label("Голова козла","слева","козий рог → рог (табурет + отвёртка)",-3.0,2.05,az);
+
+  // Задняя стена: часы, аквариум, клетка
+  cyl(0.22,0.22,0.06,C.paper,0,1.62,-2.95,{rx:Math.PI/2});
+  add(new THREE.TorusGeometry(0.22,0.025,8,24),C.wood,0,1.65,-2.93);
+  box(0.015,0.15,0.01,C.dark,0,1.65,-2.9); box(0.11,0.012,0.01,C.dark,0.05,1.65,-2.9);
+  label("Часы","центр","механизм → сердце; загадка «Автора»",0,1.98,-2.95);
+  box(0.7,0.75,0.4,C.wood,-1.0,0,-2.72);
+  add(new THREE.BoxGeometry(0.62,0.38,0.34),0,-1.0,0.94,-2.72,{mat:new THREE.MeshLambertMaterial({color:C.glass,transparent:true,opacity:0.55})});
+  [[-1.1,0.92],[-0.9,1.0]].forEach(([x,y])=>add(new THREE.SphereGeometry(0.04,10,8),0xff9a3c,x,y,-2.7).scale.set(1.6,1,0.6));
+  label("Аквариум","центр","рыбьи глаза (сачок)",-1.0,1.25,-2.72);
+  cyl(0.015,0.015,1.55,C.metal,1.0,0,-2.72); box(0.35,0.015,0.015,C.metal,1.1,1.53,-2.72);
+  add(new THREE.CylinderGeometry(0.17,0.17,0.34,16,1,true),0,1.25,1.17,-2.72,{mat:new THREE.MeshLambertMaterial({color:C.brass,wireframe:true})});
+  add(new THREE.SphereGeometry(0.05,10,8),C.canary,1.25,1.12,-2.72);
+  label("Клетка с канарейкой","центр","птичье сердце (код)",1.25,1.55,-2.72);
+
+  // Справа: комод, мышеловка, табурет, холодильник, дверь с крючком
+  box(1.2,0.9,0.5,C.woodL,2.0,0,-2.7);
+  [0.18,0.45,0.72].forEach(y=>{box(1.1,0.22,0.02,C.wood,2.0,y-0.08,-2.44);box(0.12,0.02,0.03,C.brass,2.0,y+0.02,-2.42);});
+  label("Комод (3 ящика)","справа","шкатулка для шитья: пуговицы → глаза",2.0,1.05,-2.7);
+  box(0.16,0.03,0.08,C.woodL,1.55,0,-2.25); box(0.12,0.04,0.01,C.metal,1.55,0.03,-2.25);
+  label("Мышеловка","справа","крысиный хвост (сыр из холодильника)",1.55,0.15,-2.25);
+  cyl(0.18,0.18,0.04,C.woodL,1.2,0.48,-1.6); [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([a,b])=>cyl(0.015,0.015,0.48,C.wood,1.2+a*0.12,0,-1.6+b*0.12));
+  label("Табурет","справа","достать верхушку ёлки и голову козла",1.2,0.62,-1.6);
+  box(0.65,1.8,0.65,C.fridge,2.8,0,-1.75); box(0.02,0.4,0.03,C.metal,2.45,1.05,-1.5); box(0.6,0.01,0.01,C.metal,2.8,1.3,-1.42);
+  label("Холодильник","справа","куриные лапы, сыр",2.8,1.6,-1.75);
+  box(0.06,2.05,0.95,C.wood,3.16,0,0.1); add(new THREE.SphereGeometry(0.03,8,8),C.brass,3.12,1.0,-0.25);
+  label("Дверь","справа","стук в дверь (разгадка «Автора»)",3.1,1.75,0.1);
+  box(0.04,0.03,0.04,C.brass,3.15,1.6,0.85);
+  box(0.03,0.7,0.16,C.scarf,3.12,0.92,0.85);
+  label("Крючок с шарфом","справа","нитки → грива",3.1,1.72,0.85);
+
+  // Свет: ночь + тёплая лампа + гирлянда
+  s.add(new THREE.HemisphereLight(0x5a6e9a,0x1a1410,0.55));
+  const lamp=new THREE.PointLight(C.lamp,1.6,7,1.4); lamp.position.set(0.42,1.1,0.6); lamp.castShadow=true; lamp.shadow.mapSize.set(1024,1024); s.add(lamp);
+  const glow=new THREE.PointLight(0xff9a6a,0.6,3,2); glow.position.set(tx+0.3,1.2,tz+0.5); s.add(glow);
+  const fill=new THREE.DirectionalLight(0x8fa3c8,0.25); fill.position.set(-1,3,2); s.add(fill);
+  return s;
+}
+
+const SC=scene();
+
+// ---------- Цилиндрическая панорама ----------
+const cv=document.getElementById('cv3d');
+let R;
+try{ R=new THREE.WebGLRenderer({canvas:cv,antialias:true,preserveDrawingBuffer:true}); }
+catch(e){ document.getElementById('pano').innerHTML='<p class="err" style="padding:16px">Браузер не дал WebGL — 3D-набросок здесь не показать.</p>'; return; }
+R.setPixelRatio(1); R.setSize(W,H,false); R.shadowMap.enabled=true;
+const cam=new THREE.PerspectiveCamera(); cam.position.copy(EYE);
+function renderPano(){
+  const sw=16, near=0.05, far=50;
+  R.shadowMap.autoUpdate=false; R.shadowMap.needsUpdate=true;
+  R.setScissorTest(true);
+  for(let x=0;x<W;x+=sw){
+    const yaw=((x+sw/2)-W/2)/PX_PER_TAN;          // радианы, «вправо» положительно
+    cam.rotation.set(0,-yaw,0); cam.updateMatrixWorld();
+    const ht=Math.tan(sw/2/PX_PER_TAN);
+    cam.projectionMatrix.makePerspective(-ht*near,ht*near,TAN_TOP*near,TAN_BOT*near,near,far);
+    cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+    R.setViewport(x,0,sw,H); R.setScissor(x,0,sw,H); R.render(SC,cam);
+  }
+  R.setScissorTest(false);
+}
+function projectPano(p){
+  const d=p.clone().sub(EYE); const yaw=Math.atan2(d.x,-d.z); const hd=Math.hypot(d.x,d.z);
+  return {x:W/2+yaw*PX_PER_TAN, y:(TAN_TOP-d.y/hd)*PX_PER_TAN};
+}
+const lc=document.getElementById('cvLbl'), g=lc.getContext('2d');
+function drawLabels(on){
+  g.clearRect(0,0,W,H); if(!on) return;
+  g.font='600 26px Inter, system-ui, sans-serif'; g.textBaseline='middle';
+  const placed=[];
+  LEGEND.map(l=>({l,q:projectPano(l.p)})).sort((a,b)=>a.q.y-b.q.y).forEach(({l,q})=>{
+    if(q.x<0||q.x>W||q.y<0||q.y>H) return;
+    const t=l.text, w=g.measureText(t).width+20;
+    let moved=true; while(moved){moved=false;for(const r of placed){if(Math.abs(r.x-q.x)<(r.w+w)/2+6&&Math.abs(r.y-q.y)<46){q.y=r.y+46;moved=true;}}}
+    placed.push({x:q.x,y:q.y,w});
+    g.fillStyle='rgba(14,19,27,.78)'; g.strokeStyle='#ffe3a3'; g.lineWidth=2;
+    g.beginPath(); g.roundRect?g.roundRect(q.x-w/2,q.y-20,w,40,8):g.rect(q.x-w/2,q.y-20,w,40); g.fill(); g.stroke();
+    g.fillStyle='#f3e9d2'; g.textAlign='center'; g.fillText(t,q.x,q.y+1);
+  });
+}
+renderPano();
+const lbl=document.getElementById('lbl'), frm=document.getElementById('frm'), frame=document.getElementById('frame');
+(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>drawLabels(lbl.checked));
+lbl.addEventListener('change',()=>drawLabels(lbl.checked));
+frm.addEventListener('change',()=>{frame.hidden=!frm.checked;});
+
+// Вписать в ширину / 1:1
+const pano=document.getElementById('pano'), inner=document.getElementById('panoInner'), fit=document.getElementById('fit');
+let fitted=true;
+function layout(){
+  if(fitted){const k=pano.clientWidth/W; inner.style.transform=`scale(${k})`; pano.style.height=(H*k)+'px'; inner.style.width=W+'px';}
+  else{inner.style.transform='none'; pano.style.height='auto'; pano.scrollLeft=(W-pano.clientWidth)/2;}
+  fit.setAttribute('aria-pressed',String(fitted)); fit.textContent=fitted?'Вписать в ширину':'Масштаб 1:1';
+}
+fit.addEventListener('click',()=>{fitted=!fitted;layout();});
+window.addEventListener('resize',layout); layout();
+
+// Экспорт для репозитория (используется скриптом рендера)
+window.exportPanorama=function(withLabels){
+  const o=document.createElement('canvas'); o.width=W; o.height=H; const x=o.getContext('2d');
+  x.drawImage(cv,0,0); if(withLabels){drawLabels(true); x.drawImage(lc,0,0);}
+  return o.toDataURL('image/png');
+};
+
+// ---------- Свободный осмотр ----------
+const fc=document.getElementById('cvFree'), box2=document.getElementById('free');
+const R2=new THREE.WebGLRenderer({canvas:fc,antialias:true}); R2.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); R2.shadowMap.enabled=true;
+const cam2=new THREE.PerspectiveCamera(55,16/9,0.05,60); cam2.position.set(0,5.2,5.2);
+const ctl=new THREE.OrbitControls(cam2,fc); ctl.target.set(0,0.8,-0.8); ctl.enableDamping=true; ctl.maxPolarAngle=Math.PI*0.49; ctl.update();
+const eye=new THREE.Mesh(new THREE.SphereGeometry(0.06,12,10),new THREE.MeshBasicMaterial({color:0xffffff})); eye.position.copy(EYE); SC.add(eye);
+function size2(){const w=box2.clientWidth,h=box2.clientHeight;R2.setSize(w,h,false);cam2.aspect=w/h;cam2.updateProjectionMatrix();}
+window.addEventListener('resize',size2); size2();
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+(function loop(){ctl.update();R2.render(SC,cam2);requestAnimationFrame(loop);})();
+
+// ---------- Легенда ----------
+const ul=document.getElementById('legend');
+LEGEND.forEach(l=>{const li=document.createElement('li');li.innerHTML=`<span class="zone">${l.zone}</span><div style="min-width:0"><b>${l.text}</b>${l.note?` <span>— ${l.note}</span>`:''}</div>`;ul.appendChild(li);});
+})();
+</script>
